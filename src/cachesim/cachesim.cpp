@@ -52,6 +52,10 @@ void CacheSim::updateCacheLineReplFields(CacheLine &line, unsigned wayIdx) {
     // Upgrade @p lruIdx to the most recently used
     line[wayIdx].lru = 0;
   }
+  
+  if (getReplacementPolicy() == ReplPolicy::LFU) {
+    line[wayIdx].lfu += 1;
+  }
 }
 
 void CacheSim::revertCacheLineReplFields(CacheLine &line,
@@ -92,6 +96,13 @@ CacheSim::CacheSize CacheSim::getCacheSize() const {
     // LRU bits
     componentBits = getWaysBits() * entries;
     size.components.push_back("LRU bits: " + QString::number(componentBits));
+    size.bits += componentBits;
+  }
+
+  if (m_replPolicy == ReplPolicy::LFU) {
+    // LFU bits
+    componentBits = getWaysBits() * entries;
+    size.components.push_back("LFU bits: " + QString::number(componentBits));
     size.bits += componentBits;
   }
 
@@ -156,6 +167,42 @@ CacheSim::locateEvictionWay(const CacheTransaction &transaction) {
         }
       }
     }
+   }
+    else if (m_replPolicy == ReplPolicy::LFU) {
+    if (getWays() == 1) {
+      // Nothing to do if we are in LRU and only have 1 set.
+      ew.first = 0;
+      ew.second = &cacheLine[ew.first];
+    } else {
+      // Lazily initialize all ways in the cacheline before starting to iterate.
+      for (int i = 0; i < getWays(); ++i)
+        cacheLine[i];
+
+      // If there is an invalid cache line, select that.
+      auto it =
+          std::find_if(cacheLine.begin(), cacheLine.end(),
+                       [=](const auto &way) { return !way.second.valid; });
+      if (it != cacheLine.end()) {
+        ew.first = it->first;
+        ew.second = &it->second;
+      }
+      if (ew.second == nullptr) {
+        // Else, Find LFU way.
+      int save_num = 0;
+      int tmp = 1000; // let it big enough. 1000 for test.
+      int loop_counter = 0;
+        for (auto &way : cacheLine) {
+          if (static_cast<long>(way.second.lfu) < tmp) {
+            tmp = way.second.lfu;
+            save_num = loop_counter;
+          }
+          loop_counter+=1;
+        }
+        ew.first = save_num;
+        ew.second = &cacheLine[ew.first];
+      }
+    }
+
   }
 
   Q_ASSERT(ew.first != s_invalidIndex && "Unable to locate way for eviction");

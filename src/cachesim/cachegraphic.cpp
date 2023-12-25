@@ -98,26 +98,45 @@ void CacheGraphic::updateLineReplFields(unsigned lineIdx) {
     return;
   }
 
-  if (m_cacheTextItems.at(0).at(0).lru == nullptr) {
+  if (m_cacheTextItems.at(0).at(0).lru == nullptr && m_cache.getReplacementPolicy() == ReplPolicy::LRU) {
     // The current cache configuration does not have any replacement field
     return;
   }
+  if (m_cacheTextItems.at(0).at(0).lfu == nullptr && m_cache.getReplacementPolicy() == ReplPolicy::LFU){
+    return;
+  }
+  if(m_cache.getReplacementPolicy() == ReplPolicy::LRU){
+    for (const auto &way : m_cacheTextItems[lineIdx]) {
+      // If LRU was just initialized, the actual (software) LRU value may be very
+      // large. Mask to the number of actual LRU bits.
+      unsigned lruVal = cacheLine->at(way.first).lru;
+      lruVal &= vsrtl::generateBitmask(m_cache.getWaysBits());
+      const QString lruText = QString::number(lruVal);
+      way.second.lru->setText(lruText);
 
-  for (const auto &way : m_cacheTextItems[lineIdx]) {
-    // If LRU was just initialized, the actual (software) LRU value may be very
-    // large. Mask to the number of actual LRU bits.
-    unsigned lruVal = cacheLine->at(way.first).lru;
-    lruVal &= vsrtl::generateBitmask(m_cache.getWaysBits());
-    const QString lruText = QString::number(lruVal);
-    way.second.lru->setText(lruText);
+      // LRU text might have changed; update LRU field position to center in
+      // column
+      const qreal y = lineIdx * m_lineHeight + way.first * m_setHeight;
+      const qreal x =
+          m_widthBeforeLRU + m_lruWidth / 2 - m_fm.horizontalAdvance(lruText) / 2;
+      way.second.lru->setPos(x, y);
+    }
+  }
+  if(m_cache.getReplacementPolicy() == ReplPolicy::LFU){
+    for (const auto &way : m_cacheTextItems[lineIdx]) {
+      // If LRU was just initialized, the actual (software) LRU value may be very
+      // large. Mask to the number of actual LRU bits.
+      int lfuVal = cacheLine->at(way.first).lfu;
+      const QString lfuText = QString::number(lfuVal);
+      way.second.lfu->setText(lfuText);
 
-    // LRU text might have changed; update LRU field position to center in
-    // column
-    const qreal y = lineIdx * m_lineHeight + way.first * m_setHeight;
-    const qreal x =
-        m_widthBeforeLRU + m_lruWidth / 2 - m_fm.horizontalAdvance(lruText) / 2;
-
-    way.second.lru->setPos(x, y);
+      // LRU text might have changed; update LRU field position to center in
+      // column
+      const qreal y = lineIdx * m_lineHeight + way.first * m_setHeight;
+      const qreal x =
+          m_widthBeforeLFU + m_lfuWidth / 2 - m_fm.horizontalAdvance(lfuText) / 2;
+      way.second.lfu->setPos(x, y);
+    }
   }
 }
 
@@ -409,6 +428,7 @@ void CacheGraphic::cacheInvalidated() {
   m_blockWidth = m_fm.horizontalAdvance(" " + addressString() + " ");
   m_bitWidth = m_fm.horizontalAdvance("00");
   m_lruWidth = m_fm.horizontalAdvance(QString::number(m_cache.getWays()) + " ");
+  m_lfuWidth = m_fm.horizontalAdvance(QString::number(m_cache.getWays()) + " ");
   m_cacheHeight = m_lineHeight * m_cache.getLines();
   m_tagWidth = m_blockWidth;
 
@@ -436,9 +456,10 @@ void CacheGraphic::cacheInvalidated() {
   }
 
   m_widthBeforeLRU = width;
+  m_widthBeforeLFU = width;
 
-  if (m_cache.getReplacementPolicy() == ReplPolicy::LRU &&
-      m_cache.getWays() > 1) {
+  if (m_cache.getReplacementPolicy() == ReplPolicy::LRU
+        && m_cache.getWays() > 1) {
     // Draw LRU bit column
     new QGraphicsLineItem(width + m_lruWidth, 0, width + m_lruWidth,
                           m_cacheHeight, this);
@@ -450,6 +471,22 @@ void CacheGraphic::cacheInvalidated() {
     textItem->setToolTip("Least Recently Used bits");
     width += m_lruWidth;
   }
+
+  if (m_cache.getReplacementPolicy() == ReplPolicy::LFU 
+        && m_cache.getWays() > 1) {
+    // Draw LFU bit column
+    new QGraphicsLineItem(width + m_lfuWidth, 0, width + m_lfuWidth,
+                          m_cacheHeight, this);
+    const QString LFUBitText = "LFU";
+    auto *textItem = drawText(LFUBitText,
+                              width + m_lfuWidth / 2 -
+                                  m_fm.horizontalAdvance(LFUBitText) / 2,
+                              -m_fm.height());
+    textItem->setToolTip("Least Frequently Used bits");
+    width += m_lfuWidth;
+  }
+
+
 
   m_widthBeforeTag = width;
 
@@ -704,6 +741,14 @@ void CacheGraphic::initializeControlBits() {
         x = m_widthBeforeLRU + m_lruWidth / 2 -
             m_fm.horizontalAdvance(lruText) / 2;
         line[setIdx].lru = drawText(lruText, x, y);
+      }
+      if (m_cache.getReplacementPolicy() == ReplPolicy::LFU &&
+          m_cache.getWays() > 1) {
+        const QString lfuText = QString::number(0);
+        x = m_widthBeforeLFU + m_lfuWidth / 2 -
+            m_fm.horizontalAdvance(lfuText) / 2;
+        // Create LFU field
+        line[setIdx].lfu = drawText("0", x, y);
       }
     }
   }

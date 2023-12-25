@@ -16,7 +16,7 @@ class CacheSim;
 
 enum WriteAllocPolicy { WriteAllocate, NoWriteAllocate };
 enum WritePolicy { WriteThrough, WriteBack };
-enum ReplPolicy { Random, LRU, FIFO};
+enum ReplPolicy { Random, LRU, FIFO, LFU};
 
 struct CachePreset {
   QString name;
@@ -106,6 +106,7 @@ public:
     // LRU algorithm relies on invalid cache ways to have an initial high value.
     // -1 ensures maximum value for all way sizes.
     unsigned lru = -1;
+    int lfu = 0;
   };
 
   struct CacheIndex {
@@ -329,7 +330,8 @@ private:
 };
 
 const static std::map<ReplPolicy, QString> s_cacheReplPolicyStrings{
-    {ReplPolicy::Random, "Random"}, {ReplPolicy::LRU, "LRU"}, {ReplPolicy::FIFO, "FIFO"}};
+    {ReplPolicy::Random, "Random"}, {ReplPolicy::LRU, "LRU"}, {ReplPolicy::FIFO, "FIFO"},
+    {ReplPolicy::LFU, "LFU"}};
 const static std::map<WriteAllocPolicy, QString> s_cacheWriteAllocateStrings{
     {WriteAllocPolicy::WriteAllocate, "Write allocate"},
     {WriteAllocPolicy::NoWriteAllocate, "No write allocate"}};
